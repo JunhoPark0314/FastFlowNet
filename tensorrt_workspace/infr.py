@@ -12,7 +12,7 @@ import pycuda.driver as cuda
 import pycuda.autoinit
 
 import ctypes
-ctypes.CDLL(open(os.path.join(os.path.dirname(__file__),'tensorrt_plugin_path')).read())
+ctypes.CDLL(open(os.path.join(os.path.dirname(__file__),'tensorrt_plugin_path')).read().rstrip('\n'))
 
 if __name__ == '__main__':
     logger = trt.Logger(trt.Logger.VERBOSE)
@@ -51,9 +51,10 @@ if __name__ == '__main__':
             flow = np.transpose(flow,[1,2,0])
             flow_color = flow_to_color(flow,convert_to_bgr=True)
 
-            cv2.namedWindow('tensorrt flow',cv2.WINDOW_NORMAL)
-            cv2.imshow('tensorrt flow',flow_color)
-            cv2.waitKey(0)
+            #cv2.namedWindow('tensorrt flow',cv2.WINDOW_NORMAL)
+            #cv2.imshow('tensorrt flow',flow_color)
+            #cv2.waitKey(0)
+            cv2.imwrite('tensorrt_flow.png', flow_color)
 
             for i in range(10):
                 trt_outputs = do_inference_v2(context,bindings=bindings,inputs=inputs,outputs=outputs,stream=stream)

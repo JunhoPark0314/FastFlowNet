@@ -64,7 +64,10 @@ def modify_onnx(onnx_model_file,onnx_values_file):
         searchObj = re.search( r'\([\d*, ]+', line, re.M|re.I) #把shape抓出来
         if searchObj is None:
             continue
-        shape = eval(searchObj[0][:-2]+')')
+        try:
+            shape = eval(searchObj[0][:-2]+')')
+        except:
+            shape = searchObj[0][:-2]+')'
         index2shape[id] = shape
     print(index2shape)
 
@@ -323,13 +326,22 @@ if __name__ == '__main__':
 
     div_flow = 20.0
     div_size = 64
+
+    # change here to change onnx output
+    #H = (540 // 64 + 1) * 64
+    #W = (960 // 64 + 1) * 64
+    H = 512
+    W = 512
+    max_batch = 32
+
     fig1,fig2 = cv2.imread(img_paths[0]),cv2.imread(img_paths[1])
-    fig1,fig2 = cv2.resize(fig1,(512,512)),cv2.resize(fig2,(512,512))
+    fig1,fig2 = cv2.resize(fig1,(W, H)),cv2.resize(fig2,(W, H))
 
     img1 = torch.from_numpy(fig1).float().permute(2,0,1)[None] / 255.
     img2 = torch.from_numpy(fig2).float().permute(2,0,1)[None] / 255.
     img1,img2,_ = centralize(img1,img2)
     input_t = torch.cat([img1,img2],1)
+    input_t = input_t.repeat(max_batch, 1, 1, 1)
     with torch.no_grad():
         output = flownet(input_t)
     pytorch_output = output.squeeze().detach().numpy().squeeze()
@@ -338,9 +350,10 @@ if __name__ == '__main__':
     flow = flow[0].cpu().permute(1,2,0).numpy()
     flow_color = flow_to_color(flow,convert_to_bgr=True)
 
-    cv2.namedWindow('pytorch flow',cv2.WINDOW_NORMAL)
-    cv2.imshow('pytorch flow',flow_color)
+    #cv2.namedWindow('pytorch flow',cv2.WINDOW_NORMAL)
+    #cv2.imshow('pytorch flow',flow_color)
     # cv2.waitKey(0)
+    cv2.imwrite('pytorch_flow.png',flow_color)
 
     #expoert onnx
     onnx_f = "flownet.onnx"
@@ -361,7 +374,7 @@ if __name__ == '__main__':
 
     from common import *
     import ctypes
-    ctypes.CDLL(open(os.path.join(os.path.dirname(__file__),'tensorrt_plugin_path')).read())
+    ctypes.CDLL(open(os.path.join(os.path.dirname(__file__),'tensorrt_plugin_path')).read().rstrip('\n'))
     import pycuda.driver as cuda
     import pycuda.autoinit
     with build_engine_onnx(onnx_f,fp16=True) as engine, open('engine_fp16','wb') as f:
@@ -375,13 +388,14 @@ if __name__ == '__main__':
             input_t = input_t.float().numpy()
             inputs[0].host = input_t
             trt_outputs = do_inference_v2(context,bindings=bindings,inputs=inputs,outputs=outputs,stream=stream)
-            output = trt_outputs[0].reshape(pytorch_output.shape)
+            output = trt_outputs[0].reshape(pytorch_output.shape)[0]
 
             flow = div_flow * output
             flow = np.transpose(flow,[1,2,0])
             flow_color = flow_to_color(flow,convert_to_bgr=True)
 
-            cv2.namedWindow('tensorrt flow',cv2.WINDOW_NORMAL)
-            cv2.imshow('tensorrt flow',flow_color)
-            cv2.waitKey(0)
+            #cv2.namedWindow('tensorrt flow',cv2.WINDOW_NORMAL)
+            #cv2.imshow('tensorrt flow',flow_color)
+            #cv2.waitKey(0)
+            cv2.imwrite('tensorrt_flow.png',flow_color)
 
